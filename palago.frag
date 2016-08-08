@@ -1,17 +1,24 @@
 // Author: Austin Spafford
 // Title: Palago
-// blank line needed
+// <junk-line to avoid a title-scraper bug>
 
 precision highp float;
 
 uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_time;
-
-const float k_two_pi = 6.2831853;
+uniform vec4 u_date;
 
 // www.wolframalpha.com/input/?i=1+%2F+sin+60
 const float k_one_over_unit_hex_extant_y = 1.15470053;
+
+float random (
+    vec2 st)
+{
+	return fract(
+		sin(dot(st.xy, vec2(12.9898, 78.233))) * 
+		43758.5453123);
+}
 
 vec3 convert_square_coord_to_hex_coord(
 	vec2 square_coord)
@@ -135,7 +142,7 @@ vec3 rotate_hex_coord(
 float get_hex_shape(
 	vec3 hex_fract)
 {
-    // Figured out somewhat by accident... proof needed.
+    // This was figured out somewhat by accident... it really needs a proof.
     float distance_from_center = 
         max(max(
             abs(hex_fract.x - hex_fract.y),
@@ -146,6 +153,15 @@ float get_hex_shape(
     distance_from_center *= (2.0 / 3.0);
     
     return (distance_from_center - 1.0);
+}
+
+vec3 get_hours_minutes_seconds (
+    float seconds_since_midnight)
+{
+	return vec3(
+		mod(seconds_since_midnight, 3600.0) / 3600.0,
+		mod(seconds_since_midnight, 60.0) / 60.0,
+		fract(seconds_since_midnight));
 }
 
 vec3 mix_hex_grid(
@@ -198,20 +214,33 @@ void main()
     vec3 hex_index = get_hex_index(hex_coord);
     vec3 hex_fract = get_hex_fract(hex_coord, hex_index);
     
-    vec3 static_hex_fract = hex_fract;
+    float tile_seed = random(hex_index.xy + vec2(0.23472, 0.19875));
     
-    float hex_index_distance = max(max(abs(hex_index.x), abs(hex_index.y)), abs(hex_index.z));
+    const float min_rotation_speed = 0.015;
+    const float max_rotation_speed = 0.02;
     
-    hex_fract = rotate_hex_coord(
-        hex_fract,
-    	(hex_index_distance * (k_two_pi / 3.0)));
+    float tile_rotation_velocity = mix(
+        (-1.0 * mix(min_rotation_speed, max_rotation_speed, tile_seed)),
+        mix(min_rotation_speed, max_rotation_speed, tile_seed),
+        step(0.5, tile_seed));
     
-    float palago_shape = get_palago_shape(hex_fract);
+    float raw_turn_count = ((u_time + 1000.0) * tile_rotation_velocity);
     
+    float snapped_turn_count = floor(raw_turn_count);
+    float rotation_fract = fract(raw_turn_count * sign(tile_rotation_velocity));
+    
+    float current_palago_shape = get_palago_shape(rotate_hex_coord(hex_fract, (snapped_turn_count * radians(120.0))));
+    float next_palago_shape = get_palago_shape(rotate_hex_coord(hex_fract, ((snapped_turn_count + sign(tile_rotation_velocity)) * radians(120.0))));
+    
+    float mixed_palago_shape = mix(
+    	current_palago_shape,
+    	next_palago_shape,
+    	smoothstep(0.97, 1.0, rotation_fract));
+        
     vec3 color = mix(
     	vec3(1.0, 1.0, 1.0),
     	vec3(0.0, 0.25, 1.0),
-    	smoothstep(-0.02, 0.02, palago_shape));
+    	smoothstep(-0.02, 0.02, mixed_palago_shape));
     
     // Debug-views.
     //color = (fract(hex_coord.xyz) + vec3(0.0));
