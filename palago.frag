@@ -1,6 +1,6 @@
-// Author: Austin Spafford
-// Title: Palago
-// <junk-line to avoid a title-scraper bug>
+// NondisplayedAuthor: Austin Spafford
+// NondisplayedTitle: Palago
+// Many thanks for help in the hex-grid math: http://www.redblobgames.com/grids/hexagons/
 
 precision highp float;
 

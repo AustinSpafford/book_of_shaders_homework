@@ -1,6 +1,6 @@
 // NondisplayedAuthor: Austin Spafford
 // NondisplayedTitle: Gloopy-Palago
-// <this line keeps the scraper from spilling over into reading the shader itself>
+// Many thanks for help in the hex-grid math: http://www.redblobgames.com/grids/hexagons/
 
 precision highp float;
 
