@@ -1,9 +1,7 @@
-// Author: Austin Spafford
-// Title: Blue Depths
+// NondisplayedAuthor: Austin Spafford
+// NondisplayedTitle: Blue Depths
 
-#ifdef GL_ES
-precision mediump float;
-#endif
+precision highp float;
 
 uniform vec2 u_resolution;
 uniform vec2 u_mouse;
