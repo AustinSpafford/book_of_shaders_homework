@@ -12,7 +12,7 @@ uniform vec4 u_date;
 // www.wolframalpha.com/input/?i=1+%2F+sin+60
 const float k_one_over_unit_hex_extant_y = 1.15470053;
 
-float random (
+float random(
     vec2 st)
 {
 	return fract(

@@ -11,7 +11,7 @@ const float k_two_pi = 6.283185;
 
 const float k_max_velocity = 0.1;
 
-float random (
+float random(
     vec2 st)
 {
 	return fract(
