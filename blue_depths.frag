@@ -71,6 +71,9 @@ void main()
     
     // Tiling-test.
     st *= 3.0;
+    
+    // Aspect-ratio correction.
+    st.x *= (u_resolution.x / u_resolution.y);
 
     float brightness = 0.5;
     
