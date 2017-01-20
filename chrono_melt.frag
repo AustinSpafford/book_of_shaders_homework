@@ -68,13 +68,68 @@ mat2 rotation_matrix(
         (-1.0 * sine_theta), cosine_theta);
 }
 
-ivec3 get_clock_hours_minutes_seconds(
+vec3 get_analog_clock_hours_minutes_seconds(
     float seconds_since_midnight)
 {
-	return ivec3(
-		int(mod(seconds_since_midnight, (60.0 * 60.0 * 24.0))),
-		int(mod(seconds_since_midnight, (60.0 * 60.0))),
-		int(mod(seconds_since_midnight, 60.0)));
+	return vec3(
+		mod(seconds_since_midnight, (60.0 * 60.0 * 24.0)),
+		mod(seconds_since_midnight, (60.0 * 60.0)),
+		mod(seconds_since_midnight, 60.0));
+}
+
+void get_clock_digit_and_seconds_since_change(
+    float seconds_since_midnight,
+    int digit_index, // 01=HH, 23=mm, 45=ss
+    out int out_current_digit_value,
+    out int out_previous_digit_value,
+	out float out_seconds_since_digit_changed)
+{
+    float seconds_per_number_increment;
+    float increments_per_period;
+    bool digit_is_tens_place;
+    if (digit_index <= 1)
+    {
+        // Hours.
+        seconds_per_number_increment = (60.0 * 60.0);
+        increments_per_period = 24.0;
+        digit_is_tens_place = (digit_index == 0);
+    }
+    else if (digit_index <= 3)
+    {
+        // Minutes.
+        seconds_per_number_increment = 60.0;
+        increments_per_period = 60.0;
+        digit_is_tens_place = (digit_index == 2);
+    }
+    else
+    {
+        // Seconds.
+        seconds_per_number_increment = 1.0;
+        increments_per_period = 60.0;
+        digit_is_tens_place = (digit_index == 4);
+    }
+    
+    float seconds_per_period = (increments_per_period * seconds_per_number_increment);
+
+    float seconds_since_start_of_period = mod(seconds_since_midnight, seconds_per_period);
+    int displayed_number = int(seconds_since_start_of_period / seconds_per_number_increment);
+    
+    int tens_digit_value = (displayed_number / 10);
+    int ones_digit_value = (displayed_number - (10 * tens_digit_value)); // We'd use integer-modulus, but it's not available until at least GLSL ES 3.0
+    
+    int previous_displayed_number = int(mod((float(displayed_number - 1) + increments_per_period), increments_per_period));
+    
+    int previous_tens_digit_value = (previous_displayed_number / 10);
+    int previous_ones_digit_value = (previous_displayed_number - (10 * previous_tens_digit_value)); // We'd use integer-modulus, but it's not available until at least GLSL ES 3.0
+    
+    float seconds_per_digit_increment = 
+        digit_is_tens_place ?
+        	(10.0 * seconds_per_number_increment) :
+    		seconds_per_number_increment;
+    
+    out_current_digit_value = (digit_is_tens_place ? tens_digit_value : ones_digit_value);    
+    out_previous_digit_value = (digit_is_tens_place ? previous_tens_digit_value : previous_ones_digit_value);    
+    out_seconds_since_digit_changed = mod(seconds_since_start_of_period, seconds_per_digit_increment);
 }
 
 vec2 get_closest_point_on_line_segment(
@@ -336,11 +391,11 @@ vec2 get_closest_point_on_digit_4(
     float top_y = 0.5;
     float bottom_y = -0.5;
     
-    float stem_pos_x = 0.1;
+    float stem_pos_x = 0.12;
     vec2 stem_top = vec2(stem_pos_x, top_y);
     vec2 stem_bottom = vec2(stem_pos_x, bottom_y);
     
-    vec2 beak_size = vec2(0.5, 0.7);
+    vec2 beak_size = vec2(0.45, 0.7);
     vec2 beak_bottom = (stem_top - beak_size);
     
     float cross_bar_overextension_size_x = 0.2;
@@ -609,7 +664,7 @@ vec2 get_closest_point_on_digit_9(
 vec2 get_closest_point_on_indexed_digit(
     int digit_value,
 	vec2 test_point)
-{    
+{
     vec2 result;
     
     if (digit_value < 8)
@@ -683,10 +738,10 @@ vec2 get_closest_point_on_indexed_digit(
 void convert_closest_point_to_distance_and_normal(
 	vec2 closest_point,
 	vec2 test_point,
-	out float out_test_distance,
+	out float out_distance,
 	out vec2 out_normal)
 {
-	out_test_distance = distance(closest_point, test_point);
+	out_distance = distance(closest_point, test_point);
 	out_normal = normalize(test_point - closest_point);
 }
 
@@ -705,6 +760,199 @@ vec3 get_rounded_shape_normal(
         	vec3(flat_normal, 0.0),
         	rounded_center_to_edge_fraction);
 }
+
+void get_distance_and_normal_for_blended_digit(
+	int first_digit_value,
+	int second_digit_value,
+	float blending_fraction,
+    float outer_shape_distance_threshold,
+    vec2 test_point,
+	out float out_distance,
+	out vec3 out_rounded_normal)
+{
+    vec2 first_digit_closest_point = get_closest_point_on_indexed_digit(first_digit_value, test_point);
+    vec2 second_digit_closest_point = get_closest_point_on_indexed_digit(second_digit_value, test_point);
+                
+    float first_digit_distance;
+    vec2 first_digit_normal;
+    convert_closest_point_to_distance_and_normal(first_digit_closest_point, test_point, first_digit_distance, first_digit_normal);    
+    
+    float second_digit_distance;
+    vec2 second_digit_normal;
+    convert_closest_point_to_distance_and_normal(second_digit_closest_point, test_point, second_digit_distance, second_digit_normal);
+    
+    vec3 first_digit_rounded_normal = get_rounded_shape_normal(first_digit_normal, first_digit_distance, outer_shape_distance_threshold);
+    vec3 second_digit_rounded_normal = get_rounded_shape_normal(second_digit_normal, second_digit_distance, outer_shape_distance_threshold);
+    
+    float blend_spikiness_power = 2.5;
+    
+    //float blended_digit_distance = mix(first_digit_distance, second_digit_distance, digit_melt_fraction);
+    out_distance =
+        pow(
+            mix(
+                pow(first_digit_distance, (1.0 / blend_spikiness_power)), 
+                pow(second_digit_distance, (1.0 / blend_spikiness_power)), 
+                blending_fraction), 
+            blend_spikiness_power);
+    
+    // NOTE: This approach the generating blended-normals is nonsense. It generally looks okay, but it isn't built on a decent foundation.
+    out_rounded_normal =
+        normalize(get_rounded_shape_normal(
+            mix(
+                first_digit_normal, 
+                second_digit_normal, 
+                smoothstep(first_digit_distance, second_digit_distance, out_distance)),
+        	out_distance,
+        	outer_shape_distance_threshold));   
+}
+
+vec2 get_closest_point_on_clock_separator(
+	vec2 test_point)
+{
+    float top_dot_y = 0.25;
+    float bottom_dot_y = -0.25;
+    
+    vec2 result =
+    	(test_point.y > mix(bottom_dot_y, top_dot_y, 0.5)) ?
+        	vec2(0.0, top_dot_y) :
+    		vec2(0.0, bottom_dot_y);
+    
+    return result;
+}
+
+void get_distance_and_normal_for_clock_digit(
+    float seconds_since_midnight,
+	int clock_digit_index, // 01=HH, 23=mm, 45=ss
+    float outer_shape_distance_threshold,
+    vec2 test_point,
+	out float out_distance,
+	out vec3 out_rounded_normal)
+{
+    int current_digit_value;
+    int previous_digit_value;
+    float seconds_since_digit_changed;
+	get_clock_digit_and_seconds_since_change(
+        seconds_since_midnight,
+        clock_digit_index,
+        current_digit_value,
+        previous_digit_value,
+        seconds_since_digit_changed);
+    
+    float seconds_per_digit_blend = 1.0;
+    
+    float digit_blend_fraction = min(seconds_since_digit_changed, seconds_per_digit_blend);
+    digit_blend_fraction = get_linear_fraction(-1.0, 1.0, sin(mix(radians(-90.0), radians(90.0), digit_blend_fraction)));
+    //digit_blend_fraction = smoothstep(0.0, 0.5, digit_blend_fraction);
+    //digit_blend_fraction = 1.0;
+    
+    // Debug-view a specific digit.
+    //current_digit_value = previous_digit_value = 4;
+    
+    get_distance_and_normal_for_blended_digit(
+    	previous_digit_value,
+    	current_digit_value,
+    	digit_blend_fraction,
+    	outer_shape_distance_threshold,
+        test_point,
+    	out_distance,
+    	out_rounded_normal);    
+}
+
+void get_distance_and_normal_for_clock(
+    float seconds_since_midnight,
+    float outer_shape_distance_threshold,
+    vec2 test_point,
+	out float out_distance,
+	out vec3 out_rounded_normal)
+{
+    float digit_size_x = 0.9;
+    float separator_size_x = 0.3;
+
+    // Start on the hours tens-place.
+    int digit_index = 0;
+    float digit_right_edge_x = (0.0 - (digit_size_x + separator_size_x + digit_size_x));
+    
+    // Hours ones-place.
+    if (test_point.x > digit_right_edge_x)
+    {
+        digit_index = 1;
+        digit_right_edge_x += digit_size_x;
+    }
+    
+    // Hours-to-minutes separator.
+    if (test_point.x > digit_right_edge_x)
+    {
+        digit_index = -1; // Separator.
+        digit_right_edge_x += separator_size_x;
+    }
+    
+    // Minutes tens-place.
+    if (test_point.x > digit_right_edge_x)
+    {
+        digit_index = 2;
+        digit_right_edge_x += digit_size_x;
+    }
+    
+    // Minutes ones-place.
+    if (test_point.x > digit_right_edge_x)
+    {
+        digit_index = 3;
+        digit_right_edge_x += digit_size_x;
+    }
+    
+    // Minutes-to-seconds separator.
+    if (test_point.x > digit_right_edge_x)
+    {
+        digit_index = -1; // Separator.
+        digit_right_edge_x += separator_size_x;
+    }
+    
+    // Seconds tens-place.
+    if (test_point.x > digit_right_edge_x)
+    {
+        digit_index = 4;
+        digit_right_edge_x += digit_size_x;
+    }
+    
+    // Seconds ones-place.
+    if (test_point.x > digit_right_edge_x)
+    {
+        digit_index = 5;
+        digit_right_edge_x += digit_size_x;
+    }
+    
+    if (digit_index >= 0)
+    {
+        get_distance_and_normal_for_clock_digit(
+            seconds_since_midnight,
+            digit_index,
+            outer_shape_distance_threshold,
+            (test_point - vec2((digit_right_edge_x - (digit_size_x / 2.0)), 0.0)),
+            out_distance,
+            out_rounded_normal);        
+    }
+    else
+    {
+        vec2 test_point_in_separator_space = 
+            (test_point - vec2((digit_right_edge_x - (separator_size_x / 2.0)), 0.0));
+        
+        vec2 closest_point_on_separator = 
+            get_closest_point_on_clock_separator(test_point_in_separator_space);
+        
+        vec2 separator_normal;
+        convert_closest_point_to_distance_and_normal(
+            closest_point_on_separator, 
+            test_point_in_separator_space, 
+            out_distance, 
+            separator_normal);
+        
+        out_rounded_normal =
+            normalize(get_rounded_shape_normal(
+                separator_normal,
+                out_distance,
+                outer_shape_distance_threshold));  
+    }
+}
     
 void main()
 {
@@ -712,85 +960,60 @@ void main()
     
     // Zoom-factor.
     st -= 0.5;
-    st *= 2.2;
+    st *= 7.0;
     
-    // Aspect-ratio correction.
-    st.x *= (u_resolution.x / u_resolution.y);
+    float texture_aspect_ratio = (u_resolution.x / u_resolution.y);
+    
+    // Perform aspect-ratio correction.
+    st.x *= max(1.0, texture_aspect_ratio);
+    st.y *= max(1.0, (1.0 / texture_aspect_ratio));
+    
+    // Crop down until the artwork is touching at least one pair of edges.
+    {
+        float artwork_aspect_ratio = 3.5;
+        
+        if ((artwork_aspect_ratio > 1.0) && (texture_aspect_ratio > 1.0))
+        {
+            st /= min(artwork_aspect_ratio, texture_aspect_ratio);
+        }
+        else if ((artwork_aspect_ratio < 1.0) && (texture_aspect_ratio < 1.0))
+        {
+            st *= max(artwork_aspect_ratio, texture_aspect_ratio);
+        }
+    }
         
     float seconds_since_midnight = u_date.w;
         
-    // Slow down time.
     //seconds_since_midnight *= 0.5;
+    //seconds_since_midnight *= 2.0;
     
     // Trippy transition-waves.
     //seconds_since_midnight += (-0.5 * st.y);
+    seconds_since_midnight += (0.25 * st.x);
     //seconds_since_midnight += (0.5 * smoothstep(-1.0, 1.0, sin(30.0 * length(st))));
     //seconds_since_midnight += (-1.0 * length(st));
     
-    ivec3 current_hours_minutes_seconds = get_clock_hours_minutes_seconds(seconds_since_midnight);
-    float current_subsecond_fraction = fract(seconds_since_midnight);
-    
     // st *= rotation_matrix(radians(10.0) * u_time);
     
-    //float digit_melt_fraction = smoothstep(0.0, 0.5, current_subsecond_fraction);
-    float digit_melt_fraction = get_linear_fraction(-1.0, 1.0, sin(mix(radians(-90.0), radians(90.0), current_subsecond_fraction)));
-    //digit_melt_fraction = 1.0;
-    
     float digit_distance_outer_threshold = 0.1;
-    float digit_distance_inner_threshold = 0.07;
+    float digit_distance_inner_threshold = (0.7 * digit_distance_outer_threshold);
     
-    int current_second_digit_value = int_mod(current_hours_minutes_seconds.z, 10);
+    float blended_digit_distance;
+    vec3 blended_digit_normal;
+    get_distance_and_normal_for_clock(
+        seconds_since_midnight,
+        digit_distance_outer_threshold,
+        st,
+        blended_digit_distance,
+        blended_digit_normal);
     
-    int previous_digit_value = 
-        (current_second_digit_value > 0) ?
-        	(current_second_digit_value - 1) :
-    		9;
-    
-    int current_digit_value = current_second_digit_value;
-    
-    // Debug-view a specific digit.
-    //current_digit_value = previous_digit_value = 9;
-    
-    vec2 previous_digit_closest_point = get_closest_point_on_indexed_digit(previous_digit_value, st);
-    vec2 current_digit_closest_point = get_closest_point_on_indexed_digit(current_digit_value, st);
-                
-    float previous_digit_distance;
-    vec2 previous_digit_normal;
-    convert_closest_point_to_distance_and_normal(previous_digit_closest_point, st, previous_digit_distance, previous_digit_normal);    
-    
-    float current_digit_distance;
-    vec2 current_digit_normal;
-    convert_closest_point_to_distance_and_normal(current_digit_closest_point, st, current_digit_distance, current_digit_normal);
-    
-    vec3 previous_digit_rounded_normal = get_rounded_shape_normal(previous_digit_normal, previous_digit_distance, digit_distance_outer_threshold);
-    vec3 current_digit_rounded_normal = get_rounded_shape_normal(current_digit_normal, current_digit_distance, digit_distance_outer_threshold);
-    
-    float blend_spikiness_power = 2.5;
-    
-    //float blended_digit_distance = mix(previous_digit_distance, current_digit_distance, digit_melt_fraction);
-    float blended_digit_distance = 
-        pow(
-            mix(
-                pow(previous_digit_distance, (1.0 / blend_spikiness_power)), 
-                pow(current_digit_distance, (1.0 / blend_spikiness_power)), 
-                digit_melt_fraction), 
-            blend_spikiness_power);
-    
-    // NOTE: This approach the generating blended-normals is nonsense. It generally looks okay, but it isn't built on a decent foundation.
-    vec3 blended_digit_normal = 
-        normalize(get_rounded_shape_normal(
-            mix(
-                previous_digit_normal, 
-                current_digit_normal, 
-                smoothstep(previous_digit_distance, current_digit_distance, blended_digit_distance)),
-        	blended_digit_distance,
-        	digit_distance_outer_threshold));
+    float grid_fraction = 
+        max(
+        	smoothstep(0.02, 0.0, abs(fract(st.x) - 0.5)),
+        	smoothstep(0.02, 0.0, abs(fract(st.y) - 0.5)));
         
-    vec3 background_color = 
-        mix(
-			vec3(0.0),
-    		vec3(0.2),
-    		smoothstep(0.98, 1.02, max(abs(st.x), abs(st.y))));
+    vec3 background_color = vec3(0.0);
+    //background_color += (vec3(1.2) * grid_fraction);
     
     float digit_threshold_fraction = smoothstep(digit_distance_outer_threshold, digit_distance_inner_threshold, blended_digit_distance);
         
