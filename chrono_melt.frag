@@ -84,52 +84,73 @@ void get_clock_digit_and_seconds_since_change(
     out int out_previous_digit_value,
 	out float out_seconds_since_digit_changed)
 {
-    float seconds_per_number_increment;
-    float increments_per_period;
+    int seconds_per_number_increment;
+    int increments_per_period;
     bool digit_is_tens_place;
     if (digit_index <= 1)
     {
         // Hours.
-        seconds_per_number_increment = (60.0 * 60.0);
-        increments_per_period = 24.0;
+        seconds_per_number_increment = (60 * 60);
+        increments_per_period = 24;
         digit_is_tens_place = (digit_index == 0);
     }
     else if (digit_index <= 3)
     {
         // Minutes.
-        seconds_per_number_increment = 60.0;
-        increments_per_period = 60.0;
+        seconds_per_number_increment = 60;
+        increments_per_period = 60;
         digit_is_tens_place = (digit_index == 2);
     }
     else
     {
         // Seconds.
-        seconds_per_number_increment = 1.0;
-        increments_per_period = 60.0;
+        seconds_per_number_increment = 1;
+        increments_per_period = 60;
         digit_is_tens_place = (digit_index == 4);
     }
     
-    float seconds_per_period = (increments_per_period * seconds_per_number_increment);
+    int seconds_per_period = (increments_per_period * seconds_per_number_increment);
 
-    float seconds_since_start_of_period = mod(seconds_since_midnight, seconds_per_period);
-    int displayed_number = int(seconds_since_start_of_period / seconds_per_number_increment);
+    int whole_seconds_since_midnight = int(seconds_since_midnight);
+    int starting_second_of_current_period = ((whole_seconds_since_midnight / seconds_per_period) * seconds_per_period);
+    int whole_seconds_since_start_of_period = (whole_seconds_since_midnight - starting_second_of_current_period);
     
-    int tens_digit_value = (displayed_number / 10);
-    int ones_digit_value = (displayed_number - (10 * tens_digit_value)); // We'd use integer-modulus, but it's not available until at least GLSL ES 3.0
+    int displayed_number = (whole_seconds_since_start_of_period / seconds_per_number_increment);
     
-    int previous_displayed_number = int(mod((float(displayed_number - 1) + increments_per_period), increments_per_period));
+    // Output the current digit-value.
+    {
+        int tens_digit_value = (displayed_number / 10);
+        int ones_digit_value = (displayed_number - (10 * tens_digit_value)); // We'd use integer-modulus, but it's not available until at least GLSL ES 3.0
+
+        out_current_digit_value = (digit_is_tens_place ? tens_digit_value : ones_digit_value);
+    }
     
-    int previous_tens_digit_value = (previous_displayed_number / 10);
-    int previous_ones_digit_value = (previous_displayed_number - (10 * previous_tens_digit_value)); // We'd use integer-modulus, but it's not available until at least GLSL ES 3.0
+    // Output the previous digit-value.
+    {
+        int previous_displayed_number = 
+            (displayed_number > 0) ?
+                (displayed_number - 1) :
+                (increments_per_period - 1);    
+
+        int previous_tens_digit_value = (previous_displayed_number / 10);
+        int previous_ones_digit_value = (previous_displayed_number - (10 * previous_tens_digit_value)); // We'd use integer-modulus, but it's not available until at least GLSL ES 3.0
+
+    	out_previous_digit_value = (digit_is_tens_place ? previous_tens_digit_value : previous_ones_digit_value);    
+    }
     
-    float seconds_per_digit_increment = 
-        digit_is_tens_place ?
-        	(10.0 * seconds_per_number_increment) :
-    		seconds_per_number_increment;
-    
-    out_current_digit_value = (digit_is_tens_place ? tens_digit_value : ones_digit_value);    
-    out_previous_digit_value = (digit_is_tens_place ? previous_tens_digit_value : previous_ones_digit_value);    
-    out_seconds_since_digit_changed = mod(seconds_since_start_of_period, seconds_per_digit_increment);
+    // Output the fractional seconds since the digit changed.
+    {
+        // NOTE: All floating point math is avoided until absolutely necessisary, specifically to avoid crappy-looking rounding bugs while animating the numbers.
+        
+        int seconds_per_digit_increment = 
+            digit_is_tens_place ?
+                (10 * seconds_per_number_increment) :
+                seconds_per_number_increment;
+        
+        float fractional_seconds_since_start_of_period = (seconds_since_midnight - float(starting_second_of_current_period));
+
+        out_seconds_since_digit_changed = mod(fractional_seconds_since_start_of_period, float(seconds_per_digit_increment)); 
+    }
 }
 
 vec2 get_closest_point_on_line_segment(
@@ -1030,7 +1051,7 @@ void main()
     //visualized_distance += (-0.1 * u_time);
     //color += mix(0.0, 0.5, smoothstep(-1.0, 1.0, sin(100.0 * visualized_distance)));
     
-    gl_FragColor = vec4(color, 1.0);
+    gl_FragColor = vec4(color, digit_threshold_fraction);
 }
 
 
