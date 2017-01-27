@@ -1052,7 +1052,7 @@ void main()
     //visualized_distance += (-0.1 * u_time);
     //color += mix(0.0, 0.5, smoothstep(-1.0, 1.0, sin(100.0 * visualized_distance)));
     
-    gl_FragColor = vec4(color, digit_threshold_fraction);
+    gl_FragColor = vec4(color, 1.0);
 }
 
 
