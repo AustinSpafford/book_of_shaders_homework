@@ -3,6 +3,7 @@
 // <dummy-comment to keep the title-scraper from reading into code>
 
 precision highp float;
+precision highp int; // Specifically needing since there are more than 2^15 seconds in a day.
 
 uniform vec2 u_resolution;
 uniform float u_time;
