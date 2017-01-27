@@ -85,6 +85,8 @@ void get_clock_digit_and_seconds_since_change(
     out int out_previous_digit_value,
 	out float out_seconds_since_digit_changed)
 {
+    //seconds_since_midnight += ((0.0 * 60.0 * 60.0) + (0.0 * 60.0) + (0.0)); // Debug: Offset to times of interest.
+    
     int seconds_per_number_increment;
     int increments_per_period;
     bool digit_is_tens_place;
