@@ -1,5 +1,5 @@
 // Author: Austin Spafford
-// Title: Circumlotus
+// Title: Lava Cat
 // <dummy-comment to keep the title-scraper from reading into code>
 
 precision highp float;
