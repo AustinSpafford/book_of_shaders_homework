@@ -19,7 +19,7 @@ const bool k_ground_enabled = true;
 
 const int k_samples_per_axis = 1; // "1" for per-pixel sampling, "2" for 4xSSAA, etc.
 
-const float k_raymarch_precision = 0.001;
+const float k_raymarch_precision = 0.01;
 const float k_raymarch_escape_distance = 10.0;
 
 vec4 s_bloblets[k_bloblet_count]; // (position, strength)
