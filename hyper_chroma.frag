@@ -12,18 +12,21 @@ uniform float u_time;
 const float k_pi = radians(180.0);
 const float k_tau = radians(360.0);
 
-const int k_bloblet_count = 3;
+const int k_bloblet_count = 10;
 
 const bool k_blob_enabled = true;
 const bool k_ground_enabled = true;
 
-const int k_hyperslice_count = 10;
+const int k_hyperslice_count = 15;
 
-float s_hyperslice_depths[k_hyperslice_count];
-vec3 s_hyperslice_colors[k_hyperslice_count];
-    
 vec4 s_bloblet_positions[k_bloblet_count];
 float s_bloblet_radii[k_bloblet_count];
+
+vec3 s_hyperslice_colors[k_hyperslice_count];
+float s_hyperslice_depths[k_hyperslice_count];
+
+vec3 s_light_ambient_color = vec3(0.1);
+vec4 s_light_direction; // surface-to-light
 
 vec2 s_mouse_fractions; // (u_mouse / u_resolution)
 
@@ -43,6 +46,15 @@ float sq(
     float value)
 {
     return (value * value);
+}
+
+vec3 sq(
+    vec3 value)
+{
+    return vec3(
+        (value.x * value.x),
+        (value.y * value.y),
+        (value.z * value.z));
 }
 
 float distance_sq(
@@ -234,13 +246,66 @@ float smooth_min(
         (smoothing_distance * (blend_fraction * (1.0 - blend_fraction))));
 }
 
-vec3 raytrace_scene(
+void raytrace_sphere(
+    vec4 sphere_center,
+    float sphere_radius,
 	vec4 ray_origin,
-	vec4 ray_direction)
+	vec4 ray_direction,
+	inout vec3 inout_ray_color,
+	inout float inout_ray_depth)
 {
-    vec3 result = vec3(0.0);
+    vec4 local_ray_origin = (ray_origin - sphere_center);
     
-    return result;
+    // Solving for the intersections via the quadratic equation, as seen in: https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection
+    float quadratic_a = 1.0; // dot(ray_direction, ray_direction)
+    float quadratic_b = (2.0 * dot(local_ray_origin, ray_direction));
+    float quadratic_c = (dot(local_ray_origin, local_ray_origin) - sq(sphere_radius));
+    float quadratic_discriminant = (sq(quadratic_b) - (4.0 * quadratic_a * quadratic_c));
+    
+    if (quadratic_discriminant >= 0.0)
+    {
+        float sqrt_quadratic_discriminant = sqrt(quadratic_discriminant);
+        float quadratic_divisor = (1.0 / (2.0 * quadratic_a));
+        
+        float depth_near = (((-1.0 * quadratic_b) - sqrt_quadratic_discriminant) * quadratic_divisor);
+        float depth_far = (((-1.0 * quadratic_b) + sqrt_quadratic_discriminant) * quadratic_divisor);
+        
+        float depth = ((depth_near >= 0.0) ? depth_near : depth_far);
+        
+        if ((depth >= 0.0) &&
+            (depth < inout_ray_depth))
+        {            
+            vec4 intersection = (ray_origin + (ray_direction * depth));
+            
+            vec4 normal = normalize(intersection - sphere_center);
+            float diffuse_fraction = (1.0 * max(0.0, dot(normal, s_light_direction)));
+            float specular_fraction = 0.0; // (0.5 * pow(max(0.0, (-1.0 * dot(ray_direction, reflect((-1.0 * s_light_direction), normal)))), 40.0));
+            
+            inout_ray_color = mix(s_light_ambient_color, vec3(1.0), min(1.0, (diffuse_fraction + specular_fraction)));
+            inout_ray_depth = depth;
+        }
+    }
+}
+
+void raytrace_scene(
+	vec4 ray_origin,
+	vec4 ray_direction,
+	out vec3 out_ray_color,
+	out float out_ray_depth)
+{
+    out_ray_color = vec3(0.0, 0.0, 0.0);
+    out_ray_depth = 1000.0;
+    
+    for (int bloblet_index = 0; bloblet_index < k_bloblet_count; bloblet_index++)
+    {
+        raytrace_sphere(
+            s_bloblet_positions[bloblet_index],
+            s_bloblet_radii[bloblet_index],
+            ray_origin,
+            ray_direction,
+        	out_ray_color,
+        	out_ray_depth);
+    }
 }
 
 void main()
@@ -274,14 +339,45 @@ void main()
         }
     }
     
+    s_light_direction = normalize(vec4(1.0, 1.0, 1.0, 0.0));
+    
+    // Compute the blob parameters.
+    for (int bloblet_index = 0; bloblet_index < k_bloblet_count; bloblet_index++)
+    {
+        float bloblet_fraction = (float(bloblet_index) / float(k_bloblet_count));
+        
+        vec4 bloblet_movement_rates =
+            vec4(
+                mix(0.02, 0.1, random(vec2(float(bloblet_index), 0.0))),
+                mix(0.02, 0.1, random(vec2(float(bloblet_index), 0.1))),
+                mix(0.02, 0.1, random(vec2(float(bloblet_index), 0.2))),
+                mix(0.02, 0.1, random(vec2(float(bloblet_index), 0.3))));
+        
+        s_bloblet_positions[bloblet_index] = (0.75 * vec4(1.0, 1.0, 1.0, 3.0) * sin(k_tau * bloblet_movement_rates * u_time));
+        
+        s_bloblet_positions[bloblet_index] = vec4(
+            cos(k_tau * ((0.0 * u_time) + bloblet_fraction)),
+        	sin(k_tau * ((0.0 * u_time) + bloblet_fraction)),
+        	0.0,
+            (1.0 * cos(k_tau * ((-0.1 * u_time) + (0.5 * bloblet_fraction)))));
+        
+        s_bloblet_radii[bloblet_index] = (0.75 * mix(1.0, 1.0, random(vec2(float(bloblet_index), 0.3))));
+        
+        
+        //s_bloblet_positions[bloblet_index].xyz = vec3(0.0);
+        //s_bloblet_positions[bloblet_index].w *= 2.0;
+        //s_bloblet_radii[bloblet_index] = 1.0;
+    }
+    
     vec3 scene_color;
     {
-        vec3 color_summation = vec3(0.0);
-
+        // Render all of the hyperslices.
         for (int hyperslice_index = 0; hyperslice_index < k_hyperslice_count; hyperslice_index++)
         {
+            float hyperslice_fraction = (float(hyperslice_index) / float(k_hyperslice_count - 1));
+            
             // Akin to how test_point varies from -1 to 1 on each axis, we're adding an additional axis of iteration/sampling.
-            float hyperslice_w = mix(-1.0, 1.0, (float(hyperslice_index) / float(k_hyperslice_count - 1)));
+            float hyperslice_w = (0.5 * mix(-1.0, 1.0, hyperslice_fraction));
             
             vec4 ray_origin = vec4(0.0, 0.0, 2.0, 0.0);
             vec4 ray_direction = normalize(vec4(test_point, -1.0, hyperslice_w));
@@ -295,7 +391,7 @@ void main()
             }
 
             // Camera-Pitch control.
-            if (true)
+            if (false)
             {
                 mat4 transform = rotation_matrix_yz_plane(k_tau * mix(-0.08, 0.25, (1.0 - s_mouse_fractions.y)));        
                 ray_origin *= transform;
@@ -310,13 +406,41 @@ void main()
                 ray_direction *= transform;
             }
 
-            color_summation += 
-                raytrace_scene(
-                    ray_origin,
-                    ray_direction);
+            raytrace_scene(
+                ray_origin,
+                ray_direction,
+            	s_hyperslice_colors[hyperslice_index],
+            	s_hyperslice_depths[hyperslice_index]);
         }
         
-        scene_color = (color_summation / float(k_hyperslice_count));
+        // Composite the hyperslices.
+        if (true)
+        {
+            vec3 color_summation = vec3(0.0);
+            
+            for (int hyperslice_index = 0; hyperslice_index < k_hyperslice_count; hyperslice_index++)
+            {
+            	float hyperslice_fraction = (float(hyperslice_index) / float(k_hyperslice_count - 1));
+                
+                float brightness = dot(s_hyperslice_colors[hyperslice_index], s_hyperslice_colors[hyperslice_index]); // Squaring into linear-space color.                
+                vec3 hyperslice_color = hsb_to_rgb(vec3((0.7 * hyperslice_fraction), 1.0, brightness));
+                    
+                color_summation += hyperslice_color;
+            }
+        
+        	scene_color = sqrt(color_summation / float(k_hyperslice_count)); // Converting back into sqrt-space color.
+        }
+        else
+        {
+            vec3 color_summation = vec3(0.0);
+            
+            for (int hyperslice_index = 0; hyperslice_index < k_hyperslice_count; hyperslice_index++)
+            {
+                color_summation += sq(s_hyperslice_colors[hyperslice_index]); // Squaring into linear-space color.
+            }
+        
+        	scene_color = sqrt(color_summation / float(k_hyperslice_count)); // Converting back into sqrt-space color.
+        }
     }
 
     vec3 background_color = vec3(0.0);
