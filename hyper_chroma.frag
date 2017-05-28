@@ -12,7 +12,7 @@ uniform float u_time;
 const float k_pi = radians(180.0);
 const float k_tau = radians(360.0);
 
-const int k_bloblet_count = 10;
+const int k_bloblet_count = 2;
 
 const bool k_blob_enabled = true;
 const bool k_ground_enabled = true;
@@ -274,7 +274,7 @@ void raytrace_sphere(
         
         if ((depth >= 0.0) &&
             (depth < inout_ray_depth))
-        {            
+        {
             vec4 intersection = (ray_origin + (ray_direction * depth));
             
             vec4 normal = normalize(intersection - sphere_center);
@@ -287,6 +287,44 @@ void raytrace_sphere(
     }
 }
 
+void raytrace_plane(
+	vec4 plane_center,
+	vec4 plane_normal,
+	vec4 ray_origin,
+	vec4 ray_direction,
+	inout vec3 inout_ray_color,
+	inout float inout_ray_depth)
+{    
+    // https://en.wikipedia.org/wiki/Line%E2%80%93plane_intersection#Algebraic_form
+    float depth = dot((plane_center - ray_origin), plane_normal) / dot(ray_direction, plane_normal);
+    
+    if ((depth >= 0.0) &&
+        (depth < inout_ray_depth))
+    {
+        vec4 intersection = (ray_origin + (ray_direction * depth));
+
+        float diffuse_fraction = (1.0 * max(0.0, dot(plane_normal, s_light_direction)));
+        float specular_fraction = 0.0; // (0.5 * pow(max(0.0, (-1.0 * dot(ray_direction, reflect((-1.0 * s_light_direction), normal)))), 40.0));
+        
+        vec3 surface_color = vec3(1.0);
+        
+        // Checkerboard
+        if (true)
+        {
+            const float fuzziness = 0.04;
+            
+            surface_color = 
+                mix(
+                	vec3(0.1),
+                	vec3(0.9),
+                	abs((smoothstep(-fuzziness, fuzziness, cos(k_tau * intersection.x)) + smoothstep(-fuzziness, fuzziness, cos(k_tau * intersection.z))) - 1.0));            
+        }
+
+        inout_ray_color = (surface_color * mix(s_light_ambient_color, vec3(1.0), min(1.0, (diffuse_fraction + specular_fraction))));
+        inout_ray_depth = depth;
+    }
+}
+
 void raytrace_scene(
 	vec4 ray_origin,
 	vec4 ray_direction,
@@ -294,7 +332,7 @@ void raytrace_scene(
 	out float out_ray_depth)
 {
     out_ray_color = vec3(0.0, 0.0, 0.0);
-    out_ray_depth = 1000.0;
+    out_ray_depth = 10.0;
     
     for (int bloblet_index = 0; bloblet_index < k_bloblet_count; bloblet_index++)
     {
@@ -306,6 +344,14 @@ void raytrace_scene(
         	out_ray_color,
         	out_ray_depth);
     }
+    
+    raytrace_plane(
+    	vec4(0.0, -0.4, 0.0, 0.0),
+    	normalize(vec4(0.0, 1.0, 0.0, 0.0)),
+        ray_origin,
+        ray_direction,
+        out_ray_color,
+        out_ray_depth);
 }
 
 void main()
@@ -353,20 +399,18 @@ void main()
                 mix(0.02, 0.1, random(vec2(float(bloblet_index), 0.2))),
                 mix(0.02, 0.1, random(vec2(float(bloblet_index), 0.3))));
         
-        s_bloblet_positions[bloblet_index] = (0.75 * vec4(1.0, 1.0, 1.0, 3.0) * sin(k_tau * bloblet_movement_rates * u_time));
+        s_bloblet_positions[bloblet_index] = (0.75 * vec4(1.0, 1.0, 0.0, 1.0) * sin(k_tau * bloblet_movement_rates * u_time));
         
-        s_bloblet_positions[bloblet_index] = vec4(
-            cos(k_tau * ((0.0 * u_time) + bloblet_fraction)),
-        	sin(k_tau * ((0.0 * u_time) + bloblet_fraction)),
-        	0.0,
-            (1.0 * cos(k_tau * ((-0.1 * u_time) + (0.5 * bloblet_fraction)))));
+        if (false)
+        {
+            s_bloblet_positions[bloblet_index] = vec4(
+                cos(k_tau * ((0.0 * u_time) + bloblet_fraction)),
+                sin(k_tau * ((0.0 * u_time) + bloblet_fraction)),
+                0.0,
+                (1.0 * cos(k_tau * ((-0.1 * u_time) + (0.5 * bloblet_fraction)))));
+        }
         
         s_bloblet_radii[bloblet_index] = (0.75 * mix(1.0, 1.0, random(vec2(float(bloblet_index), 0.3))));
-        
-        
-        //s_bloblet_positions[bloblet_index].xyz = vec3(0.0);
-        //s_bloblet_positions[bloblet_index].w *= 2.0;
-        //s_bloblet_radii[bloblet_index] = 1.0;
     }
     
     vec3 scene_color;
@@ -391,7 +435,7 @@ void main()
             }
 
             // Camera-Pitch control.
-            if (false)
+            if (true)
             {
                 mat4 transform = rotation_matrix_yz_plane(k_tau * mix(-0.08, 0.25, (1.0 - s_mouse_fractions.y)));        
                 ray_origin *= transform;
@@ -399,7 +443,7 @@ void main()
             }
 
             // Camera-Yaw control.
-            if (false)
+            if (true)
             {
                 mat4 transform = rotation_matrix_xz_plane(k_tau * s_mouse_fractions.x);
                 ray_origin *= transform;
