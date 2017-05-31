@@ -18,8 +18,8 @@ void main()
     vec3 output_color = (is_lit ? vec3(0.6, 0.9, 0.2) : vec3(0.1, 0.1, 0.1));
     
     // For a fancier look, try commenting in the following two lines:
-    // float lit_fraction = (smoothstep(0.0, 0.2, time_within_cycle) * smoothstep(1.5, 1.0, time_within_cycle));
-    // output_color = mix(vec3(0.1, 0.1, 0.1), vec3(0.6, 0.9, 0.2), lit_fraction);
+    //float lit_fraction = (smoothstep(0.0, 0.2, time_within_cycle) * smoothstep(1.5, 1.0, time_within_cycle));
+    //output_color = mix(vec3(0.1, 0.1, 0.1), vec3(0.6, 0.9, 0.2), lit_fraction);
 
     gl_FragColor = vec4(output_color, 1.0); // Output the resulting color in the format (Red, Green, Blue, Alpha). An Alpha-value of "1.0" means full-opacity.
 }
