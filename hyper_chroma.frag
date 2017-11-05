@@ -396,17 +396,43 @@ void raytrace_tesseract(
     if ((result_near_depth <= result_far_depth) &&
         (result_near_depth < inout_ray_depth))
     {
-        inout_ray_color = vec3(1.0, 1.0, 1.0);
-        inout_ray_depth = result_near_depth;
+        vec4 normalized_local_surface = ((local_ray_origin + (local_ray_direction * result_near_depth)) / tesseract_scale);
         
-        // Lighting
-        if (false)
+        float cube_hole_fraction = smoothstep(0.1, 1.0, s_mouse_fractions.x);
+        cube_hole_fraction = 0.8;
+        
+        if ((step(cube_hole_fraction, abs(normalized_local_surface)) * step(abs(normalized_local_surface), vec4(0.999999))) != vec4(0.0))
         {
-            vec4 normalized_local_surface = ((local_ray_origin + (local_ray_direction * result_near_depth)) / tesseract_scale);
-            vec4 surface_normal = (normalize(step(0.999, abs(normalized_local_surface))) * sign(normalized_local_surface));
-            float diffuse_fraction = (1.0 * max(0.0, dot(surface_normal, (s_tesseract_world_to_local_rotation * s_light_direction))));
+            inout_ray_color = vec3(1.0);
+            inout_ray_depth = result_near_depth;
 
-            inout_ray_color *= mix(s_light_ambient_color, vec3(1.0), diffuse_fraction);
+            // Lighting
+            if (true)
+            {
+                vec4 surface_normal = (normalize(step(0.999, abs(normalized_local_surface))) * sign(normalized_local_surface));
+                float diffuse_fraction = (1.0 * max(0.0, dot(surface_normal, (s_tesseract_world_to_local_rotation * s_light_direction))));
+
+                inout_ray_color *= mix(s_light_ambient_color, vec3(1.0), diffuse_fraction);
+            }
+        }
+        else if (result_far_depth < inout_ray_depth)
+        {
+            normalized_local_surface = ((local_ray_origin + (local_ray_direction * result_far_depth)) / tesseract_scale);
+
+            if ((step(cube_hole_fraction, abs(normalized_local_surface)) * step(abs(normalized_local_surface), vec4(0.999999))) != vec4(0.0))
+            {
+                inout_ray_color = vec3(1.0);
+                inout_ray_depth = result_far_depth;
+
+                // Lighting
+                if (true)
+                {
+                    vec4 surface_normal = (normalize(step(0.999, abs(normalized_local_surface))) * (-1.0 * sign(normalized_local_surface)));
+                    float diffuse_fraction = (1.0 * max(0.0, dot(surface_normal, (s_tesseract_world_to_local_rotation * s_light_direction))));
+
+                    inout_ray_color *= mix(s_light_ambient_color, vec3(1.0), diffuse_fraction);
+                }
+            }
         }
     }
 }
@@ -433,16 +459,20 @@ void raytrace_scene(
     }
     */
     
+    vec4 tesseract_scale = vec4(0.6);
+    //tesseract_scale = vec4(0.8, 0.2, 0.2, 0.7);
+    tesseract_scale = vec4(0.6, 0.6, 0.6, 0.2);
+      
     raytrace_tesseract(
 		vec4(0.0, 0.3, 0.0, 0.0), // tesseract_center
-        vec4(0.8, 0.2, 0.2, 0.7), // tesseract_scale
+        tesseract_scale,
     	ray_origin,
         ray_direction,
         out_ray_color,
         out_ray_depth);
-    
+        
     raytrace_plane(
-    	vec4(0.0, -0.6, 0.0, 0.0),
+    	vec4(0.0, -0.8, 0.0, 0.0),
     	normalize(vec4(0.0, 1.0, 0.0, 0.0)),
         ray_origin,
         ray_direction,
@@ -481,7 +511,7 @@ void main()
         }
     }
     
-    s_light_direction = normalize(vec4(1.0, 1.0, 1.0, 0.0));
+    s_light_direction = normalize(vec4(1.0, 2.0, 1.5, 0.0));
     
     // Build a transform for the tesseract.
     {
@@ -490,17 +520,19 @@ void main()
     	s_tesseract_world_to_local_rotation = (
             rotation_mat4_xy_plane(k_tau * smoothstep(0.0, 0.1, animation_fraction)) * 
 
-            rotation_mat4_xy_plane(k_tau * smoothstep(0.1, 0.2, animation_fraction)) * 
-            rotation_mat4_xz_plane(k_tau * smoothstep(0.1, 0.2, animation_fraction)) *
+            //rotation_mat4_xy_plane(k_tau * smoothstep(0.1, 0.2, animation_fraction)) * 
+            //rotation_mat4_xz_plane(k_tau * smoothstep(0.1, 0.2, animation_fraction)) *
 
-            rotation_mat4_zw_plane(k_tau * smoothstep(0.2, 0.3, animation_fraction)) * 
+            //rotation_mat4_xz_plane(k_tau * 0.125) * 
+            rotation_mat4_xw_plane(k_tau * smoothstep(0.1, 0.3, animation_fraction)) * 
+            //rotation_mat4_xz_plane(k_tau * -0.125) * 
 
             rotation_mat4_xy_plane(k_tau * smoothstep(0.3, 0.4, animation_fraction)) *  
             rotation_mat4_xw_plane(k_tau * smoothstep(0.3, 0.4, animation_fraction)) *  
 
-            rotation_mat4_xy_plane(k_tau * smoothstep(0.4, 1.0, animation_fraction)) *  
-            rotation_mat4_yz_plane(k_tau * 2.0 * smoothstep(0.4, 1.0, animation_fraction)) *  
-            rotation_mat4_xz_plane(k_tau * smoothstep(0.4, 1.0, animation_fraction)) *  
+            //rotation_mat4_xy_plane(k_tau * smoothstep(0.4, 1.0, animation_fraction)) *  
+            //rotation_mat4_yz_plane(k_tau * 2.0 * smoothstep(0.4, 1.0, animation_fraction)) *  
+            //rotation_mat4_xz_plane(k_tau * smoothstep(0.4, 1.0, animation_fraction)) *  
             rotation_mat4_xw_plane(k_tau * 2.0 * smoothstep(0.4, 1.0, animation_fraction)) *  
             rotation_mat4_yw_plane(k_tau * smoothstep(0.4, 1.0, animation_fraction)) *  
             rotation_mat4_zw_plane(k_tau * 3.0 * smoothstep(0.4, 1.0, animation_fraction)));
@@ -518,7 +550,9 @@ void main()
                 mix(0.02, 0.1, random(vec2(float(bloblet_index), 0.2))),
                 mix(0.02, 0.1, random(vec2(float(bloblet_index), 0.3))));
         
-        s_bloblet_positions[bloblet_index] = (0.75 * vec4(1.0, 1.0, 0.0, 1.0) * sin(k_tau * bloblet_movement_rates * u_time));
+        bloblet_movement_rates *= 0.5;
+        
+        s_bloblet_positions[bloblet_index] = (0.75 * vec4(1.0, 1.0, 1.0, 1.0) * sin(k_tau * bloblet_movement_rates * u_time));
         
         if (false)
         {
@@ -529,7 +563,7 @@ void main()
                 (1.0 * cos(k_tau * ((-0.1 * u_time) + (0.5 * bloblet_fraction)))));
         }
         
-        s_bloblet_radii[bloblet_index] = (0.75 * mix(1.0, 1.0, random(vec2(float(bloblet_index), 0.3))));
+        s_bloblet_radii[bloblet_index] = (0.5 * mix(1.0, 1.0, random(vec2(float(bloblet_index), 0.3))));
     }
     
     vec3 scene_color;
@@ -541,8 +575,11 @@ void main()
             
             float hyperslice_fraction = ((float(hyperslice_index) + mix(-0.5, 0.5, dithering_fraction)) / max(1.0, float(k_hyperslice_count - 1)));
             
+            float w_fov = 0.5;//s_mouse_fractions.y;
+            
             // Akin to how test_point varies from -1 to 1 on each axis, we're adding an additional axis of iteration/sampling.
-            float hyperslice_w = (0.5 * mix(-1.0, 1.0, hyperslice_fraction));
+            float hyperslice_w = mix((-1.0 * w_fov), w_fov, hyperslice_fraction);
+            hyperslice_w = sign(hyperslice_w) * pow(abs(hyperslice_w), 2.0);
             
             vec4 ray_origin = vec4(0.0, 0.0, 2.0, 0.0);
             vec4 ray_direction = normalize(vec4(test_point, -1.0, hyperslice_w));
@@ -577,7 +614,10 @@ void main()
             }
             else
             {
-                mat4 transform = rotation_mat4_xz_plane(k_tau * fract(u_time * 0.012));
+                float yaw_fraction = fract(u_time * 0.012);
+                yaw_fraction = mix(0.1, -0.35, smoothstep(-1.0, 1.0, cos(u_time * 0.11)));
+                
+                mat4 transform = rotation_mat4_xz_plane(k_tau * yaw_fraction);
                 ray_origin *= transform;
                 ray_direction *= transform;
             }
@@ -587,6 +627,27 @@ void main()
                 ray_direction,
             	s_hyperslice_colors[hyperslice_index],
             	s_hyperslice_depths[hyperslice_index]);
+    
+            if (s_hyperslice_depths[hyperslice_index] < 10.0)
+            {
+                vec4 shadow_ray_origin = (ray_origin + (ray_direction * s_hyperslice_depths[hyperslice_index]));
+                vec4 shadow_ray_direction = s_light_direction;
+                
+                shadow_ray_origin += (0.001 * shadow_ray_direction);
+
+                vec3 shadow_ray_color = vec3(0.0);
+                float shadow_ray_depth = 10.0;
+                raytrace_scene(
+                    shadow_ray_origin,
+                    shadow_ray_direction,
+                    shadow_ray_color,
+                    shadow_ray_depth);
+
+                if (shadow_ray_depth < 10.0)
+                {
+                    s_hyperslice_colors[hyperslice_index] = min(s_hyperslice_colors[hyperslice_index], s_light_ambient_color);
+                }
+            }
         }
         
         // Composite the hyperslices.
